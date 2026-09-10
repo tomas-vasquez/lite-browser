@@ -130,6 +130,32 @@ body,
   box-shadow: 0 0 0 4px var(--accent-glow), var(--shadow);
 }
 
+/* Pies de página de la mini home (GitHub, repo y versión) */
+.home-footer {
+  margin-top: auto;
+  padding-top: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.home-footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.home-footer a {
+  color: var(--text-muted);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--border-color);
+  transition: color 0.15s;
+}
+.home-footer a:active { color: var(--accent); }
+
 .home-search-icon {
   display: flex;
   align-items: center;

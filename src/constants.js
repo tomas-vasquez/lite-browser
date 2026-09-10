@@ -1,12 +1,3 @@
-export const INITIAL_BOOKMARKS = [
-  { id: '1', title: 'Ultralite Start', url: 'ultralite://newtab', icon: '⚡' },
-  { id: '2', title: 'Wikipedia', url: 'https://en.wikipedia.org', icon: '📚' },
-  { id: '3', title: 'Hacker News', url: 'https://news.ycombinator.com', icon: '📰' },
-  { id: '4', title: 'GitHub', url: 'https://github.com', icon: '💻' },
-  { id: '5', title: 'MDN Web Docs', url: 'https://developer.mozilla.org', icon: '📖' },
-  { id: '6', title: 'DuckDuckGo', url: 'https://duckduckgo.com', icon: '🦆' },
-];
-
 export const POPULAR_SITES = [
   { title: 'Wikipedia', url: 'https://en.wikipedia.org', icon: '📚', gradient: 'linear-gradient(135deg, #3b82f6, #4f46e5)' },
   { title: 'Hacker News', url: 'https://news.ycombinator.com', icon: '📰', gradient: 'linear-gradient(135deg, #f97316, #d97706)' },

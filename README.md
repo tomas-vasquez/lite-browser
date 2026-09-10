@@ -2,9 +2,22 @@
 
 Navegador ultraligero para Android hecho con React (Vite) + Capacitor.
 
-- **Interfaz (web shell):** mini home con búsqueda e historial reciente, selector de pestañas en bottom sheet.
+## Propósito
+
+Ultralite Browser no es solo un navegador: está pensado como **herramienta de desarrollo** para cuando programas desde Android. Permite **desplegar y abrir servidores de desarrollo directamente en el teléfono**:
+
+- Conecta a tu `localhost` o a los servidores de desarrollo (Vite, webpack dev server, Node, etc.) levantados en tu equipo o en la misma red LAN.
+- Carga páginas reales en `WebView` a pantalla completa por pestaña, sin restricciones de iframes.
+- Recarga, navega y prueba tu app en el dispositivo mientras programas, con pestañas, historial y favoritos ligeros.
+
+Ideal para streams de desarrollo, pruebas rápidas en Android o despliegues locales sin publicar nada.
+
+## Características
+
+- **Interfaz (web shell):** mini home con búsqueda e historial reciente, favoritos persistentes y selector de pestañas en bottom sheet.
 - **Páginas:** una `android.webkit.WebView` nativa a pantalla completa por pestaña (ideal para sitios que bloquean iframes). En modo web (dev) se usa un stack de iframes persistentes como fallback.
-- **Navegación:** FAB nativo flotante para cambiar de pestaña y botón atrás del sistema gestionado de forma nativa (historia real por pestaña).
+- **Navegación:** FAB nativo flotante y arrastrable para cambiar de pestaña, y botón atrás del sistema gestionado de forma nativa (historia real por pestaña).
+- **Footer con créditos:** en la pantalla de inicio se muestra la versión, el GitHub y el repositorio del proyecto.
 
 ## Desarrollo web
 

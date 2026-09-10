@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, X, Globe, ExternalLink, Search, ArrowRight, Clock, LayoutGrid } from 'lucide-react';
-import { SEARCH_ENGINES, INITIAL_BOOKMARKS } from './constants';
+import { Plus, X, Globe, ExternalLink, Search, ArrowRight, Clock, LayoutGrid, GitBranch } from 'lucide-react';
+import { SEARCH_ENGINES } from './constants';
 import { NATIVE, nativeCreateTab, nativeShowTab, nativeHideTabs, nativeCloseTab, nativeShowSwitcher, nativeHideSwitcher, nativeSetFabPosition, subscribeEvents } from './browser-tabs';
+import { version as APP_VERSION } from '../package.json';
 import './App.css';
 
 // Helper: extraer dominio legible
@@ -19,7 +20,7 @@ const loadFavorites = () => {
   } catch {
     /* noop */
   }
-  return INITIAL_BOOKMARKS;
+  return [];
 };
 
 const loadHistory = () => {
@@ -59,7 +60,7 @@ export default function App() {
   const [favorites, setFavorites] = useState(loadFavorites);
   const [fabPos, setFabPos] = useState(null);
   const [settings] = useState({
-    searchEngine: 'duckduckgo',
+    searchEngine: 'google',
     adBlocker: true,
     javascriptEnabled: true,
     proxyMode: false,
@@ -583,6 +584,30 @@ function MiniHome({ history, favorites, navigateTo, onAddFavorite, onClearHistor
           </div>
         </section>
       )}
+
+      <footer className="home-footer">
+        <span className="home-footer-brand">
+          <GitBranch size={14} /> Ultralite Browser · v{APP_VERSION}
+        </span>
+        <a
+          href="https://github.com/tomas-vasquez"
+          onClick={(e) => {
+            e.preventDefault();
+            navigateTo('https://github.com/tomas-vasquez');
+          }}
+        >
+          github.com/tomas-vasquez
+        </a>
+        <a
+          href="https://github.com/tomas-vasquez/lite-browser"
+          onClick={(e) => {
+            e.preventDefault();
+            navigateTo('https://github.com/tomas-vasquez/lite-browser');
+          }}
+        >
+          github.com/tomas-vasquez/lite-browser
+        </a>
+      </footer>
     </div>
   );
 }
