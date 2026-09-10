@@ -430,6 +430,7 @@ public class TabWebViewPlugin extends Plugin {
         wv.setLayoutParams(new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
+        wv.setBackgroundColor(0xFF0F1117);
 
         WebSettings s = wv.getSettings();
         s.setJavaScriptEnabled(true);

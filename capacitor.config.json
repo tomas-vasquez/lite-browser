@@ -2,6 +2,7 @@
   "appId": "com.ultralite.browser",
   "appName": "Ultralite Browser",
   "webDir": "dist",
+  "backgroundColor": "#0F1117",
   "server": {
     "androidScheme": "https"
   },
