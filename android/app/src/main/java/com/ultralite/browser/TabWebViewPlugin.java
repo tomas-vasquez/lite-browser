@@ -27,6 +27,9 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -39,6 +42,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 @CapacitorPlugin(name = "TabWebView")
@@ -57,6 +61,7 @@ public class TabWebViewPlugin extends Plugin {
     private Runnable fabLongPress = null;
     private float fabDownRawX = 0;
     private float fabDownRawY = 0;
+    private boolean insetsOwnerInit = false;
 
     // Los PluginMethod de Capacitor corren en un hilo de trabajo; toda la UI debe ir al main thread.
     private void runOnMain(Runnable r) {
@@ -71,12 +76,53 @@ public class TabWebViewPlugin extends Plugin {
         return 0;
     }
 
+    // Manejo determinista de los insets del teclado/status: con "insetsHandling": "disable"
+    // en capacitor.config.json, Capacitor no registra su listener multi-path (frágil según
+    // versión de WebView/SDK). Aquí aplicamos el padding correcto y mantenemos las CSS vars.
+    private void initInsetsOwner() {
+        if (insetsOwnerInit) return;
+        insetsOwnerInit = true;
+        View webParent = (View) getBridge().getWebView().getParent();
+        if (webParent == null) return;
+
+        ViewCompat.setOnApplyWindowInsetsListener(webParent, (v, insets) -> {
+            boolean keyboardVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
+            Insets systemBars = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            int bottom = keyboardVisible ? ime.bottom : systemBars.bottom;
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, bottom);
+            injectSafeAreaCSS(systemBars.top, systemBars.right, keyboardVisible ? 0 : systemBars.bottom, systemBars.left);
+            return new WindowInsetsCompat.Builder(insets)
+                    .setInsets(
+                            WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout(),
+                            Insets.of(0, 0, 0, 0))
+                    .build();
+        });
+        webParent.requestApplyInsets();
+    }
+
+    private void injectSafeAreaCSS(int top, int right, int bottom, int left) {
+        final float density = getActivity().getResources().getDisplayMetrics().density;
+        final String script = String.format(Locale.US,
+                "try { var d = document.documentElement;" +
+                "d.style.setProperty('--safe-area-inset-top','%dpx');" +
+                "d.style.setProperty('--safe-area-inset-right','%dpx');" +
+                "d.style.setProperty('--safe-area-inset-bottom','%dpx');" +
+                "d.style.setProperty('--safe-area-inset-left','%dpx');" +
+                "} catch(e) {}",
+                Math.round(top / density), Math.round(right / density),
+                Math.round(bottom / density), Math.round(left / density));
+        getBridge().getWebView().evaluateJavascript(script, null);
+    }
+
     private void ensureUi() {
         if (fab != null) return;
         Activity activity = getActivity();
         root = (ViewGroup) activity.findViewById(android.R.id.content);
         if (root == null) return;
         navBottomInset = navInset();
+        initInsetsOwner();
 
         // FAB idéntico al .fab-tabs de React (long-press para arrastrarlo)
         fab = new ImageButton(activity);
