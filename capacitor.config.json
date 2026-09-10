@@ -4,5 +4,10 @@
   "webDir": "dist",
   "server": {
     "androidScheme": "https"
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "disable"
+    }
   }
 }
