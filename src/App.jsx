@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, X, Globe, ExternalLink, Search, ArrowRight, Clock, LayoutGrid, GitBranch } from 'lucide-react';
-import { EdgeToEdge } from '@capawesome/capacitor-android-edge-to-edge-support';
 import { SEARCH_ENGINES } from './constants';
 import { NATIVE, nativeCreateTab, nativeShowTab, nativeHideTabs, nativeCloseTab, nativeShowSwitcher, nativeHideSwitcher, nativeSetFabPosition, subscribeEvents } from './browser-tabs';
 import { version as APP_VERSION } from '../package.json';
@@ -77,20 +76,6 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
-
-  // Edge-to-edge: aplica insets al webview y colores de barras acordes al tema oscuro
-  useEffect(() => {
-    if (!NATIVE) return;
-    (async () => {
-      try {
-        await EdgeToEdge.enable();
-        await EdgeToEdge.setStatusBarColor({ color: '#0F1117' });
-        await EdgeToEdge.setNavigationBarColor({ color: '#0F1117' });
-      } catch {
-        /* noop */
-      }
-    })();
-  }, []);
 
   // Posición guardada del FAB (solo en web/dev; en Android el nativo la aplica)
   useEffect(() => {
