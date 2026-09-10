@@ -14,6 +14,9 @@ const EVENTS = [
   'onTabBackHome',
   'onTabShown',
   'onTabsHidden',
+  'onSwitcherSelect',
+  'onSwitcherNew',
+  'onSwitcherCloseTab',
 ];
 
 export function subscribeEvents(handler) {
@@ -30,3 +33,5 @@ export const nativeShowTab = (id) => Tabs && Tabs.showTab({ id });
 export const nativeHideTabs = () => Tabs && Tabs.hideTabs();
 export const nativeLoadTab = (id, url) => Tabs && Tabs.loadTab({ id, url });
 export const nativeCloseTab = (id) => Tabs && Tabs.closeTab({ id });
+export const nativeShowSwitcher = (tabs) => Tabs && Tabs.showSwitcher({ tabs });
+export const nativeHideSwitcher = () => Tabs && Tabs.hideSwitcher();

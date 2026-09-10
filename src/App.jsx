@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, X, Globe, ExternalLink, Search, ArrowRight, Clock, LayoutGrid } from 'lucide-react';
 import { SEARCH_ENGINES } from './constants';
-import { NATIVE, nativeCreateTab, nativeShowTab, nativeHideTabs, nativeCloseTab, subscribeEvents } from './browser-tabs';
+import { NATIVE, nativeCreateTab, nativeShowTab, nativeHideTabs, nativeCloseTab, nativeShowSwitcher, subscribeEvents } from './browser-tabs';
 import './App.css';
 
 // Helper: extraer dominio legible
@@ -154,6 +154,62 @@ export default function App() {
     }
   };
 
+  // Abre el selector de pestañas (sheet nativo en Android, React en web)
+  const openSwitcher = () => {
+    const { activeTabId: id, tabs: list } = uiRef.current;
+    if (NATIVE) {
+      nativeShowSwitcher(
+        list.map((t) => ({
+          id: t.id,
+          title: isNewTab(t.url) ? 'Nueva pestaña' : cleanDomain(t.title),
+          active: t.id === id,
+          isNew: isNewTab(t.url),
+        }))
+      );
+    } else {
+      setTabSwitcherOpen(true);
+    }
+  };
+
+  const selectTabFromSwitcher = (id) => {
+    const { tabs: list } = uiRef.current;
+    setActiveTabId(id);
+    const t = list.find((x) => x.id === id);
+    if (NATIVE) {
+      if (t && !isNewTab(t.url)) nativeShowTab(id);
+      else nativeHideTabs();
+    }
+  };
+
+  const performCloseTab = (tabId) => {
+    const { activeTabId: cur, tabs: list } = uiRef.current;
+    if (list.length <= 1) {
+      openSwitcher();
+      return;
+    }
+    const idx = list.findIndex((t) => t.id === tabId);
+    const next = list.filter((t) => t.id !== tabId);
+    const newActive = cur === tabId ? next[Math.max(0, idx - 1)].id : cur;
+    setTabs(next);
+    if (NATIVE) nativeCloseTab(tabId);
+    if (cur === tabId) {
+      setActiveTabId(newActive);
+      if (NATIVE && !isNewTab(next.find((x) => x.id === newActive)?.url)) {
+        nativeShowTab(newActive);
+      }
+    }
+    if (NATIVE) {
+      nativeShowSwitcher(
+        next.map((t) => ({
+          id: t.id,
+          title: isNewTab(t.url) ? 'Nueva pestaña' : cleanDomain(t.title),
+          active: t.id === newActive,
+          isNew: isNewTab(t.url),
+        }))
+      );
+    }
+  };
+
   // Botón atrás del sistema Android (WebView): popstate
   useEffect(() => {
     if (NATIVE) return;
@@ -185,10 +241,20 @@ export default function App() {
           updateTab(tabId, { isLoading: data.progress < 100 });
           break;
         case 'onFabTap':
-          setTabSwitcherOpen(true);
+          openSwitcher();
           break;
         case 'onTabBackHome':
           updateTab(tabId, newTabState());
+          break;
+        case 'onSwitcherSelect':
+          selectTabFromSwitcher(tabId);
+          break;
+        case 'onSwitcherNew':
+          createNewTab();
+          if (NATIVE) nativeHideTabs();
+          break;
+        case 'onSwitcherCloseTab':
+          performCloseTab(tabId);
           break;
         default:
           break;
@@ -230,7 +296,7 @@ export default function App() {
         <button
           type="button"
           className="fab-tabs"
-          onClick={() => setTabSwitcherOpen(true)}
+          onClick={openSwitcher}
           aria-label="Cambiar de pestaña"
           title="Pestañas abiertas"
         >
