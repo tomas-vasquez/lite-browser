@@ -57,13 +57,6 @@ public class TabWebViewPlugin extends Plugin {
         getActivity().runOnUiThread(r);
     }
 
-    private static void put(JSObject o, String key, Object value) {
-        try {
-            o.put(key, value);
-        } catch (JSONException ignored) {
-        }
-    }
-
     private int navInset() {
         if (Build.VERSION.SDK_INT >= 30 && root != null) {
             WindowInsets insets = root.getRootWindowInsets();
@@ -139,7 +132,7 @@ public class TabWebViewPlugin extends Plugin {
                             hideAllTabsUi();
                             activeTabId = null;
                             JSObject data = new JSObject();
-                            put(data, "tabId", tabId);
+                            data.put("tabId", tabId);
                             notifyListeners("onTabBackHome", data);
                         }
                     }
@@ -244,7 +237,13 @@ public class TabWebViewPlugin extends Plugin {
         switcherTitle.setText("Pestañas (" + n + ")");
         if (tabsArray == null) return;
         Activity activity = getActivity();
-        for (Object o : tabsArray.toList()) {
+        java.util.List<Object> tabs;
+        try {
+            tabs = tabsArray.toList();
+        } catch (JSONException e) {
+            return;
+        }
+        for (Object o : tabs) {
             if (!(o instanceof JSONObject)) continue;
             JSONObject t = (JSONObject) o;
             String id = t.optString("id");
@@ -307,12 +306,12 @@ public class TabWebViewPlugin extends Plugin {
         row.setOnClickListener(v -> {
             hideSwitcherUi();
             JSObject d = new JSObject();
-            put(d, "tabId", id);
+            d.put("tabId", id);
             notifyListeners("onSwitcherSelect", d);
         });
         close.setOnClickListener(v -> {
             JSObject d = new JSObject();
-            put(d, "tabId", id);
+            d.put("tabId", id);
             notifyListeners("onSwitcherCloseTab", d);
         });
         row.addView(close);
@@ -387,14 +386,14 @@ public class TabWebViewPlugin extends Plugin {
         if (tabId == null) return;
         if (url != null) {
             JSObject u = new JSObject();
-            put(u, "tabId", tabId);
-            put(u, "url", url);
+            u.put("tabId", tabId);
+            u.put("url", url);
             notifyListeners("onUrlChange", u);
         }
         if (title != null) {
             JSObject t = new JSObject();
-            put(t, "tabId", tabId);
-            put(t, "title", title);
+            t.put("tabId", tabId);
+            t.put("title", title);
             notifyListeners("onTitleChange", t);
         }
         if (progress > 0 && tabId.equals(activeTabId) && progressBar != null) {
