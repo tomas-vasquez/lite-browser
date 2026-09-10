@@ -33,6 +33,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.HashMap;
@@ -54,6 +55,13 @@ public class TabWebViewPlugin extends Plugin {
     // Los PluginMethod de Capacitor corren en un hilo de trabajo; toda la UI debe ir al main thread.
     private void runOnMain(Runnable r) {
         getActivity().runOnUiThread(r);
+    }
+
+    private static void put(JSObject o, String key, Object value) {
+        try {
+            o.put(key, value);
+        } catch (JSONException ignored) {
+        }
     }
 
     private int navInset() {
@@ -131,7 +139,7 @@ public class TabWebViewPlugin extends Plugin {
                             hideAllTabsUi();
                             activeTabId = null;
                             JSObject data = new JSObject();
-                            data.put("tabId", tabId);
+                            put(data, "tabId", tabId);
                             notifyListeners("onTabBackHome", data);
                         }
                     }
@@ -299,12 +307,12 @@ public class TabWebViewPlugin extends Plugin {
         row.setOnClickListener(v -> {
             hideSwitcherUi();
             JSObject d = new JSObject();
-            d.put("tabId", id);
+            put(d, "tabId", id);
             notifyListeners("onSwitcherSelect", d);
         });
         close.setOnClickListener(v -> {
             JSObject d = new JSObject();
-            d.put("tabId", id);
+            put(d, "tabId", id);
             notifyListeners("onSwitcherCloseTab", d);
         });
         row.addView(close);
@@ -379,14 +387,14 @@ public class TabWebViewPlugin extends Plugin {
         if (tabId == null) return;
         if (url != null) {
             JSObject u = new JSObject();
-            u.put("tabId", tabId);
-            u.put("url", url);
+            put(u, "tabId", tabId);
+            put(u, "url", url);
             notifyListeners("onUrlChange", u);
         }
         if (title != null) {
             JSObject t = new JSObject();
-            t.put("tabId", tabId);
-            t.put("title", title);
+            put(t, "tabId", tabId);
+            put(t, "title", title);
             notifyListeners("onTitleChange", t);
         }
         if (progress > 0 && tabId.equals(activeTabId) && progressBar != null) {
@@ -442,7 +450,7 @@ public class TabWebViewPlugin extends Plugin {
             fab.setVisibility(View.VISIBLE);
             activeTabId = id;
             JSObject data = new JSObject();
-            data.put("tabId", id);
+            put(data, "tabId", id);
             notifyListeners("onTabShown", data);
             call.resolve();
         });
