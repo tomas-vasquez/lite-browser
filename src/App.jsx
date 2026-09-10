@@ -1,12 +1,39 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, X, Globe, ExternalLink, Search, ArrowRight, Clock, LayoutGrid } from 'lucide-react';
-import { SEARCH_ENGINES } from './constants';
-import { NATIVE, nativeCreateTab, nativeShowTab, nativeHideTabs, nativeCloseTab, nativeShowSwitcher, nativeHideSwitcher, subscribeEvents } from './browser-tabs';
+import { SEARCH_ENGINES, INITIAL_BOOKMARKS } from './constants';
+import { NATIVE, nativeCreateTab, nativeShowTab, nativeHideTabs, nativeCloseTab, nativeShowSwitcher, nativeHideSwitcher, nativeSetFabPosition, subscribeEvents } from './browser-tabs';
 import './App.css';
 
 // Helper: extraer dominio legible
 const cleanDomain = (url) => (url || '').replace(/^https?:\/\//, '');
 const isNewTab = (url) => url === 'ultralite://newtab';
+const FAB_SIZE = 44;
+
+const loadFavorites = () => {
+  try {
+    const raw = localStorage.getItem('ultralite.favorites');
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr;
+    }
+  } catch {
+    /* noop */
+  }
+  return INITIAL_BOOKMARKS;
+};
+
+const loadHistory = () => {
+  try {
+    const raw = localStorage.getItem('ultralite.history');
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr.slice(0, 30);
+    }
+  } catch {
+    /* noop */
+  }
+  return [];
+};
 
 const makeTab = (id) => ({
   id,
@@ -28,7 +55,9 @@ export default function App() {
   const [tabs, setTabs] = useState([makeTab('tab-1')]);
   const [activeTabId, setActiveTabId] = useState('tab-1');
   const [tabSwitcherOpen, setTabSwitcherOpen] = useState(false);
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState(loadHistory);
+  const [favorites, setFavorites] = useState(loadFavorites);
+  const [fabPos, setFabPos] = useState(null);
   const [settings] = useState({
     searchEngine: 'duckduckgo',
     adBlocker: true,
@@ -46,6 +75,116 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
+
+  // Posición guardada del FAB (solo en web/dev; en Android el nativo la aplica)
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('ultralite.fabPosition') || 'null');
+      if (saved) setFabPos(saved);
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  // Persistir posición del FAB y sincronizarla con el FAB nativo (Android)
+  useEffect(() => {
+    if (!fabPos) return;
+    try {
+      localStorage.setItem('ultralite.fabPosition', JSON.stringify(fabPos));
+    } catch {
+      /* noop */
+    }
+    if (NATIVE) nativeSetFabPosition(fabPos.x, fabPos.y);
+  }, [fabPos]);
+
+  // Persistir favoritos
+  useEffect(() => {
+    try {
+      localStorage.setItem('ultralite.favorites', JSON.stringify(favorites));
+    } catch {
+      /* noop */
+    }
+  }, [favorites]);
+
+  // Persistir historial
+  useEffect(() => {
+    try {
+      localStorage.setItem('ultralite.history', JSON.stringify(history));
+    } catch {
+      /* noop */
+    }
+  }, [history]);
+
+  const clearHistory = () => setHistory([]);
+
+  const addFavorite = (title, url) => {
+    const u = (url || '').trim();
+    if (!u) return;
+    const t = (title || '').trim() || cleanDomain(u);
+    setFavorites((prev) => [
+      ...prev,
+      { id: 'fav-' + Date.now(), title: t, url: u, icon: t.charAt(0).toUpperCase() },
+    ]);
+  };
+
+  // Long-press para arrastrar el FAB de React (solo web/dev)
+  const fabDragRef = useRef({ timer: null, dragging: false, startX: 0, startY: 0 });
+  const suppressFabClickRef = useRef(false);
+
+  const clearFabTimer = () => {
+    const d = fabDragRef.current;
+    if (d.timer) {
+      clearTimeout(d.timer);
+      d.timer = null;
+    }
+  };
+
+  const handleFabPointerMove = (e) => {
+    const d = fabDragRef.current;
+    if (!d.dragging) {
+      if (Math.abs(e.clientX - d.startX) > 8 || Math.abs(e.clientY - d.startY) > 8) clearFabTimer();
+      return;
+    }
+    e.preventDefault();
+    setFabPos({
+      x: Math.max(0, Math.min(window.innerWidth - FAB_SIZE, Math.round(e.clientX - FAB_SIZE / 2))),
+      y: Math.max(0, Math.min(window.innerHeight - FAB_SIZE, Math.round(e.clientY - FAB_SIZE / 2))),
+    });
+  };
+
+  const handleFabPointerUp = () => {
+    const wasDragging = fabDragRef.current.dragging;
+    clearFabTimer();
+    window.removeEventListener('pointermove', handleFabPointerMove);
+    window.removeEventListener('pointerup', handleFabPointerUp);
+    window.removeEventListener('pointercancel', handleFabPointerUp);
+    fabDragRef.current.dragging = false;
+    suppressFabClickRef.current = wasDragging;
+  };
+
+  const handleFabPointerDown = (e) => {
+    clearFabTimer();
+    fabDragRef.current = {
+      timer: null,
+      dragging: false,
+      startX: e.clientX,
+      startY: e.clientY,
+    };
+    fabDragRef.current.timer = setTimeout(() => {
+      fabDragRef.current.dragging = true;
+    }, 400);
+    window.addEventListener('pointermove', handleFabPointerMove);
+    window.addEventListener('pointerup', handleFabPointerUp);
+    window.addEventListener('pointercancel', handleFabPointerUp);
+  };
+
+  const handleFabClick = () => {
+    if (suppressFabClickRef.current) {
+      suppressFabClickRef.current = false;
+      return;
+    }
+    openTabSwitcher();
+  };
 
   const pushWindowHistory = () => {
     try { window.history.pushState({ app: true }, ''); } catch { /* noop */ }
@@ -215,6 +354,9 @@ export default function App() {
         case 'onFabTap':
           openTabSwitcher();
           break;
+        case 'onFabPosition':
+          setFabPos({ x: data.x, y: data.y });
+          break;
         case 'onTabBackHome':
           updateTab(tabId, newTabState());
           break;
@@ -266,15 +408,19 @@ export default function App() {
           </div>
         )}
 
-        <button
-          type="button"
-          className="fab-tabs"
-          onClick={openTabSwitcher}
-          aria-label="Cambiar de pestaña"
-          title="Pestañas abiertas"
-        >
-          <LayoutGrid size={20} />
-        </button>
+        {!NATIVE && (
+          <button
+            type="button"
+            className="fab-tabs"
+            style={fabPos ? { left: fabPos.x, top: fabPos.y, right: 'auto', bottom: 'auto' } : undefined}
+            onPointerDown={handleFabPointerDown}
+            onClick={handleFabClick}
+            aria-label="Cambiar de pestaña"
+            title="Pestañas abiertas"
+          >
+            <LayoutGrid size={20} />
+          </button>
+        )}
 
         <div className="page-stack">
           {tabs.map((tab) =>
@@ -295,7 +441,14 @@ export default function App() {
           )}
 
           {isNewTab(activeTab?.url) && (
-            <MiniHome key={activeTab.id} history={history} navigateTo={navigateTo} />
+            <MiniHome
+              key={activeTab.id}
+              history={history}
+              favorites={favorites}
+              navigateTo={navigateTo}
+              onAddFavorite={addFavorite}
+              onClearHistory={clearHistory}
+            />
           )}
 
           {!NATIVE && !isNewTab(activeTab?.url) && (
@@ -352,8 +505,9 @@ export default function App() {
 /* ============================================================
    MINI HOME (nueva pestaña: búsqueda + historial)
    ============================================================ */
-function MiniHome({ history, navigateTo }) {
+function MiniHome({ history, favorites, navigateTo, onAddFavorite, onClearHistory }) {
   const [query, setQuery] = useState('');
+  const [confirmingClear, setConfirmingClear] = useState(false);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -381,9 +535,39 @@ function MiniHome({ history, navigateTo }) {
         </button>
       </form>
 
+      <FavoritesSection favorites={favorites} onNavigate={navigateTo} onAdd={onAddFavorite} />
+
       {history.length > 0 && (
         <section className="home-section">
-          <h2>Recientes</h2>
+          <div className="section-title-row">
+            <h2>Recientes</h2>
+            <button
+              type="button"
+              className={`section-action ${confirmingClear ? 'danger' : ''}`}
+              onClick={() => {
+                if (confirmingClear) {
+                  onClearHistory();
+                  setConfirmingClear(false);
+                } else {
+                  setConfirmingClear(true);
+                }
+              }}
+            >
+              {confirmingClear ? 'Sí, borrar todo' : 'Borrar'}
+            </button>
+          </div>
+          {confirmingClear && (
+            <div className="clear-confirm">
+              <span>¿Borrar todo el historial?</span>
+              <button
+                type="button"
+                className="clear-confirm-cancel"
+                onClick={() => setConfirmingClear(false)}
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
           <div className="recent-list">
             {history.slice(0, 8).map((h, i) => (
               <button key={i} type="button" className="recent-item" onClick={() => navigateTo(h.url)}>
@@ -400,6 +584,82 @@ function MiniHome({ history, navigateTo }) {
         </section>
       )}
     </div>
+  );
+}
+
+function FavoritesSection({ favorites, onNavigate, onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [url, setUrl] = useState('');
+
+  const submit = (e) => {
+    e.preventDefault();
+    onAdd(title, url);
+    setTitle('');
+    setUrl('');
+    setOpen(false);
+  };
+
+  return (
+    <section className="home-section">
+      <h2>Favoritos</h2>
+      <div className="fav-grid">
+        {favorites.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            className="fav-item"
+            onClick={() => onNavigate(f.url)}
+            title={f.url}
+          >
+            <span className="fav-avatar" aria-hidden="true">
+              {f.icon || '★'}
+            </span>
+            <span className="fav-label">{f.title}</span>
+          </button>
+        ))}
+        <button
+          type="button"
+          className="fav-item fav-add"
+          onClick={() => setOpen((o) => !o)}
+          aria-label="Añadir nuevo favorito"
+        >
+          <span className="fav-avatar" aria-hidden="true">
+            {open ? <X size={18} /> : <Plus size={18} />}
+          </span>
+          <span className="fav-label">{open ? 'Cancelar' : 'Añadir nuevo'}</span>
+        </button>
+      </div>
+      {open && (
+        <form className="fav-form" onSubmit={submit}>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Nombre"
+            autoCapitalize="words"
+          />
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://…"
+            enterKeyHint="done"
+            autoCapitalize="off"
+            autoCorrect="off"
+            autoFocus
+          />
+          <div className="fav-form-actions">
+            <button type="button" className="btn-secondary" onClick={() => setOpen(false)}>
+              Cancelar
+            </button>
+            <button type="submit" className="fav-form-ok">
+              Añadir
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }
 

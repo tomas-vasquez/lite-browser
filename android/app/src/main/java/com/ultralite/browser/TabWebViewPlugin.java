@@ -8,7 +8,9 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.webkit.CookieManager;
@@ -51,6 +53,10 @@ public class TabWebViewPlugin extends Plugin {
     private LinearLayout switcherList = null;
     private TextView switcherTitle = null;
     private int navBottomInset = 0;
+    private boolean fabDragging = false;
+    private Runnable fabLongPress = null;
+    private float fabDownRawX = 0;
+    private float fabDownRawY = 0;
 
     // Los PluginMethod de Capacitor corren en un hilo de trabajo; toda la UI debe ir al main thread.
     private void runOnMain(Runnable r) {
@@ -72,13 +78,59 @@ public class TabWebViewPlugin extends Plugin {
         if (root == null) return;
         navBottomInset = navInset();
 
-        // FAB idéntico al .fab-tabs de React
+        // FAB idéntico al .fab-tabs de React (long-press para arrastrarlo)
         fab = new ImageButton(activity);
         fab.setImageResource(R.drawable.ic_tabs);
         fab.setScaleType(ImageButton.ScaleType.CENTER);
         fab.setPadding(0, 0, 0, 0);
         fab.setContentDescription("Cambiar de pestaña");
-        fab.setOnClickListener(v -> notifyListeners("onFabTap", new JSObject()));
+
+        final ViewConfiguration vc = ViewConfiguration.get(activity);
+        final int touchSlop = vc.getScaledTouchSlop();
+        fabLongPress = () -> {
+            fabDragging = true;
+            fab.setElevation(dp(10));
+        };
+
+        fab.setOnTouchListener((v, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    fabDownRawX = event.getRawX();
+                    fabDownRawY = event.getRawY();
+                    fabDragging = false;
+                    v.removeCallbacks(fabLongPress);
+                    v.postDelayed(fabLongPress, ViewConfiguration.getLongPressTimeout());
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    if (!fabDragging) {
+                        float dx = Math.abs(event.getRawX() - fabDownRawX);
+                        float dy = Math.abs(event.getRawY() - fabDownRawY);
+                        if (dx > touchSlop || dy > touchSlop) v.removeCallbacks(fabLongPress);
+                    } else {
+                        moveFabTo(event.getRawX(), event.getRawY());
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    v.removeCallbacks(fabLongPress);
+                    if (fabDragging) {
+                        fabDragging = false;
+                        fab.setElevation(dp(6));
+                        JSObject d = new JSObject();
+                        d.put("x", pxToDp(Math.round(v.getX())));
+                        d.put("y", pxToDp(Math.round(v.getY())));
+                        notifyListeners("onFabPosition", d);
+                    } else {
+                        notifyListeners("onFabTap", new JSObject());
+                    }
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    v.removeCallbacks(fabLongPress);
+                    fabDragging = false;
+                    fab.setElevation(dp(6));
+                    return true;
+            }
+            return false;
+        });
 
         int fabSize = dp(44);
         FrameLayout.LayoutParams flp = new FrameLayout.LayoutParams(fabSize, fabSize);
@@ -92,7 +144,7 @@ public class TabWebViewPlugin extends Plugin {
         fabBg.setColor(0xFF212533);
         fabBg.setStroke(dp(1), 0xFF2E3345);
         fab.setBackground(fabBg);
-        fab.setVisibility(View.GONE);
+        fab.setVisibility(View.VISIBLE);
 
         progressBar = new ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal);
         FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(
@@ -408,12 +460,59 @@ public class TabWebViewPlugin extends Plugin {
 
     private void hideAllTabsUi() {
         for (WebView wv : webViews.values()) wv.setVisibility(View.GONE);
-        if (fab != null) fab.setVisibility(View.GONE);
         if (progressBar != null) progressBar.setVisibility(View.GONE);
+    }
+
+    private static int clamp(int v, int min, int max) {
+        return Math.max(min, Math.min(max, v));
+    }
+
+    private int pxToDp(int px) {
+        return Math.round(px / getActivity().getResources().getDisplayMetrics().density);
+    }
+
+    private void setFabPositionPx(int x, int y) {
+        if (fab == null || root == null) return;
+        int size = fab.getWidth() > 0 ? fab.getWidth() : dp(44);
+        int maxX = Math.max(0, root.getWidth() - size);
+        int maxY = Math.max(0, root.getHeight() - size);
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) fab.getLayoutParams();
+        lp.gravity = Gravity.TOP | Gravity.START;
+        lp.leftMargin = clamp(x, 0, maxX);
+        lp.topMargin = clamp(y, 0, maxY);
+        fab.setLayoutParams(lp);
+        fab.setElevation(dp(6));
+    }
+
+    private void moveFabTo(float rawX, float rawY) {
+        if (fab == null || root == null) return;
+        int[] loc = new int[2];
+        root.getLocationOnScreen(loc);
+        int size = fab.getWidth() > 0 ? fab.getWidth() : dp(44);
+        int maxX = Math.max(0, root.getWidth() - size);
+        int maxY = Math.max(0, root.getHeight() - size);
+        int x = clamp(Math.round(rawX - loc[0] - size / 2f), 0, maxX);
+        int y = clamp(Math.round(rawY - loc[1] - size / 2f), 0, maxY);
+        setFabPositionPx(x, y);
     }
 
     private int dp(int value) {
         return (int) (value * getActivity().getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    @PluginMethod
+    public void setFabPosition(PluginCall call) {
+        Integer x = call.getInt("x");
+        Integer y = call.getInt("y");
+        if (x == null || y == null) {
+            call.reject("x e y obligatorios (dp)");
+            return;
+        }
+        runOnMain(() -> {
+            ensureUi();
+            setFabPositionPx(dp(x), dp(y));
+            call.resolve();
+        });
     }
 
     @PluginMethod

@@ -11,6 +11,7 @@ const EVENTS = [
   'onTitleChange',
   'onProgress',
   'onFabTap',
+  'onFabPosition',
   'onTabBackHome',
   'onTabShown',
   'onTabsHidden',
@@ -35,3 +36,4 @@ export const nativeLoadTab = (id, url) => Tabs && Tabs.loadTab({ id, url });
 export const nativeCloseTab = (id) => Tabs && Tabs.closeTab({ id });
 export const nativeShowSwitcher = (tabs) => Tabs && Tabs.showSwitcher({ tabs });
 export const nativeHideSwitcher = () => Tabs && Tabs.hideSwitcher();
+export const nativeSetFabPosition = (x, y) => Tabs && Tabs.setFabPosition({ x, y });
