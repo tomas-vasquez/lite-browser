@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, X, Globe, ExternalLink, Search, ArrowRight, Clock, LayoutGrid } from 'lucide-react';
 import { SEARCH_ENGINES } from './constants';
-import { NATIVE, nativeCreateTab, nativeShowTab, nativeHideTabs, nativeCloseTab, subscribeEvents } from './browser-tabs';
+import { NATIVE, nativeCreateTab, nativeShowTab, nativeHideTabs, nativeCloseTab, nativeShowSwitcher, nativeHideSwitcher, subscribeEvents } from './browser-tabs';
 import './App.css';
 
 // Helper: extraer dominio legible
@@ -154,6 +154,34 @@ export default function App() {
     }
   };
 
+  // Selector de pestañas: en la app nativa abre el bottom sheet nativo de Android
+  const openTabSwitcher = () => {
+    if (!NATIVE) {
+      setTabSwitcherOpen(true);
+      return;
+    }
+    const { tabs: list, activeTabId: activeId } = uiRef.current;
+    nativeShowSwitcher(
+      list.map((t) => ({
+        id: t.id,
+        title: isNewTab(t.url) ? 'Nueva pestaña' : t.title || cleanDomain(t.url),
+        active: t.id === activeId,
+        isNew: isNewTab(t.url),
+      }))
+    );
+  };
+
+  const selectTab = (id) => {
+    setActiveTabId(id);
+    setTabSwitcherOpen(false);
+    if (NATIVE) {
+      nativeHideSwitcher();
+      const t = uiRef.current.tabs.find((x) => x.id === id);
+      if (t && !isNewTab(t.url)) nativeShowTab(id);
+      else nativeHideTabs();
+    }
+  };
+
   // Botón atrás del sistema Android (WebView): popstate
   useEffect(() => {
     if (NATIVE) return;
@@ -185,10 +213,19 @@ export default function App() {
           updateTab(tabId, { isLoading: data.progress < 100 });
           break;
         case 'onFabTap':
-          setTabSwitcherOpen(true);
+          openTabSwitcher();
           break;
         case 'onTabBackHome':
           updateTab(tabId, newTabState());
+          break;
+        case 'onSwitcherSelect':
+          selectTab(tabId);
+          break;
+        case 'onSwitcherNew':
+          createNewTab();
+          break;
+        case 'onSwitcherCloseTab':
+          closeTab(tabId);
           break;
         default:
           break;
@@ -202,16 +239,18 @@ export default function App() {
     const newId = 'tab-' + Date.now();
     setTabs((prev) => [...prev, makeTab(newId)]);
     setActiveTabId(newId);
-    if (!NATIVE) pushWindowHistory();
+    if (NATIVE) nativeHideTabs();
+    else pushWindowHistory();
   };
 
   const closeTab = (tabId) => {
-    if (tabs.length <= 1) return;
+    const { tabs: list, activeTabId: activeId } = uiRef.current;
+    if (list.length <= 1) return;
     if (NATIVE) nativeCloseTab(tabId);
-    const tabIndex = tabs.findIndex((t) => t.id === tabId);
-    const newTabs = tabs.filter((t) => t.id !== tabId);
+    const tabIndex = list.findIndex((t) => t.id === tabId);
+    const newTabs = list.filter((t) => t.id !== tabId);
     setTabs(newTabs);
-    if (activeTabId === tabId) {
+    if (activeId === tabId) {
       const next = newTabs[Math.max(0, tabIndex - 1)];
       setActiveTabId(next.id);
       if (NATIVE && !isNewTab(next.url)) nativeShowTab(next.id);
@@ -230,7 +269,7 @@ export default function App() {
         <button
           type="button"
           className="fab-tabs"
-          onClick={() => setTabSwitcherOpen(true)}
+          onClick={openTabSwitcher}
           aria-label="Cambiar de pestaña"
           title="Pestañas abiertas"
         >
@@ -295,13 +334,7 @@ export default function App() {
             tabs={tabs}
             activeTabId={activeTabId}
             onSelect={(id) => {
-              setActiveTabId(id);
-              setTabSwitcherOpen(false);
-              if (NATIVE) {
-                const t = tabs.find((x) => x.id === id);
-                if (t && !isNewTab(t.url)) nativeShowTab(id);
-                else nativeHideTabs();
-              }
+              selectTab(id);
             }}
             onCreate={() => {
               createNewTab();
