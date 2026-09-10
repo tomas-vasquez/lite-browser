@@ -161,6 +161,8 @@ public class TabWebViewPlugin extends Plugin {
 
         wv.setVisibility(View.GONE);
         root.addView(wv);
+        if (fab != null) root.bringChildToFront(fab);
+        if (progressBar != null) root.bringChildToFront(progressBar);
         if (url != null) wv.loadUrl(url);
         return wv;
     }
@@ -228,6 +230,8 @@ public class TabWebViewPlugin extends Plugin {
             hideAllTabsUi();
             wv.setVisibility(View.VISIBLE);
             wv.requestFocus();
+            if (fab != null) fab.bringToFront();
+            if (progressBar != null) progressBar.bringToFront();
             fab.setVisibility(View.VISIBLE);
             activeTabId = id;
             JSObject data = new JSObject();
