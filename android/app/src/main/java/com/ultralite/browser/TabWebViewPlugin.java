@@ -2,6 +2,7 @@ package com.ultralite.browser;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.res.ColorStateList;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
@@ -35,6 +36,11 @@ public class TabWebViewPlugin extends Plugin {
     private ImageButton fab = null;
     private ProgressBar progressBar = null;
     private ViewGroup root = null;
+
+    // Los PluginMethod de Capacitor corren en un hilo de trabajo; toda la UI debe ir al main thread.
+    private void runOnMain(Runnable r) {
+        getActivity().runOnUiThread(r);
+    }
 
     private void ensureUi() {
         if (fab != null) return;
@@ -71,7 +77,7 @@ public class TabWebViewPlugin extends Plugin {
         progressBar.setLayoutParams(plp);
         progressBar.setMax(100);
         progressBar.setProgress(0);
-        progressBar.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFF8B5CF6));
+        progressBar.setProgressTintList(ColorStateList.valueOf(0xFF8B5CF6));
         progressBar.setVisibility(View.GONE);
 
         root.addView(progressBar);
@@ -105,6 +111,7 @@ public class TabWebViewPlugin extends Plugin {
     @SuppressLint("SetJavaScriptEnabled")
     private WebView buildWebView(String id, String url) {
         Activity activity = getActivity();
+        ensureUi();
         WebView wv = new WebView(activity);
         wv.setId(View.generateViewId());
         wv.setTag(id);
@@ -160,26 +167,25 @@ public class TabWebViewPlugin extends Plugin {
 
     private void emit(WebView view, String url, String title, int progress) {
         String tabId = (String) view.getTag();
-        if (tabId != null) {
-            if (url != null) {
-                JSObject u = new JSObject();
-                u.put("tabId", tabId);
-                u.put("url", url);
-                notifyListeners("onUrlChange", u);
-            }
-            if (title != null) {
-                JSObject t = new JSObject();
-                t.put("tabId", tabId);
-                t.put("title", title);
-                notifyListeners("onTitleChange", t);
-            }
-            if (progress > 0 && tabId.equals(activeTabId)) {
-                if (progress >= 100) {
-                    progressBar.setVisibility(View.GONE);
-                } else {
-                    progressBar.setVisibility(View.VISIBLE);
-                    progressBar.setProgress(progress);
-                }
+        if (tabId == null) return;
+        if (url != null) {
+            JSObject u = new JSObject();
+            u.put("tabId", tabId);
+            u.put("url", url);
+            notifyListeners("onUrlChange", u);
+        }
+        if (title != null) {
+            JSObject t = new JSObject();
+            t.put("tabId", tabId);
+            t.put("title", title);
+            notifyListeners("onTitleChange", t);
+        }
+        if (progress > 0 && tabId.equals(activeTabId) && progressBar != null) {
+            if (progress >= 100) {
+                progressBar.setVisibility(View.GONE);
+            } else {
+                progressBar.setVisibility(View.VISIBLE);
+                progressBar.setProgress(progress);
             }
         }
     }
@@ -196,70 +202,80 @@ public class TabWebViewPlugin extends Plugin {
 
     @PluginMethod
     public void createTab(PluginCall call) {
-        ensureUi();
         String id = call.getString("id");
         String url = call.getString("url");
-        if (id == null || webViews.containsKey(id)) {
+        runOnMain(() -> {
+            ensureUi();
+            if (id == null || webViews.containsKey(id)) {
+                call.resolve();
+                return;
+            }
+            webViews.put(id, buildWebView(id, url));
             call.resolve();
-            return;
-        }
-        webViews.put(id, buildWebView(id, url));
-        call.resolve();
+        });
     }
 
     @PluginMethod
     public void showTab(PluginCall call) {
-        ensureUi();
         String id = call.getString("id");
-        WebView wv = webViews.get(id);
-        if (wv == null) {
-            call.reject("tab no existe: " + id);
-            return;
-        }
-        hideAllTabsUi();
-        wv.setVisibility(View.VISIBLE);
-        wv.requestFocus();
-        fab.setVisibility(View.VISIBLE);
-        activeTabId = id;
-        JSObject data = new JSObject();
-        data.put("tabId", id);
-        notifyListeners("onTabShown", data);
-        call.resolve();
+        runOnMain(() -> {
+            ensureUi();
+            WebView wv = webViews.get(id);
+            if (wv == null) {
+                call.reject("tab no existe: " + id);
+                return;
+            }
+            hideAllTabsUi();
+            wv.setVisibility(View.VISIBLE);
+            wv.requestFocus();
+            fab.setVisibility(View.VISIBLE);
+            activeTabId = id;
+            JSObject data = new JSObject();
+            data.put("tabId", id);
+            notifyListeners("onTabShown", data);
+            call.resolve();
+        });
     }
 
     @PluginMethod
     public void hideTabs(PluginCall call) {
-        ensureUi();
-        hideAllTabsUi();
-        activeTabId = null;
-        notifyListeners("onTabsHidden", new JSObject());
-        call.resolve();
+        runOnMain(() -> {
+            ensureUi();
+            hideAllTabsUi();
+            activeTabId = null;
+            notifyListeners("onTabsHidden", new JSObject());
+            call.resolve();
+        });
     }
 
     @PluginMethod
     public void loadTab(PluginCall call) {
-        ensureUi();
         String id = call.getString("id");
         String url = call.getString("url");
-        WebView wv = webViews.get(id);
-        if (wv == null) {
-            wv = buildWebView(id, url);
-            webViews.put(id, wv);
-        } else if (url != null) {
-            wv.loadUrl(url);
-        }
-        call.resolve();
+        runOnMain(() -> {
+            ensureUi();
+            WebView wv = webViews.get(id);
+            if (wv == null) {
+                wv = buildWebView(id, url);
+                webViews.put(id, wv);
+            } else if (url != null) {
+                wv.loadUrl(url);
+            }
+            call.resolve();
+        });
     }
 
     @PluginMethod
     public void closeTab(PluginCall call) {
         String id = call.getString("id");
-        WebView wv = webViews.remove(id);
-        if (wv != null) {
-            ViewGroup parent = (ViewGroup) wv.getParent();
-            if (parent != null) parent.removeView(wv);
-            wv.destroy();
-        }
-        call.resolve();
+        runOnMain(() -> {
+            WebView wv = webViews.remove(id);
+            if (wv != null) {
+                ViewGroup parent = (ViewGroup) wv.getParent();
+                if (parent != null) parent.removeView(wv);
+                wv.destroy();
+            }
+            call.resolve();
+        });
     }
 }
