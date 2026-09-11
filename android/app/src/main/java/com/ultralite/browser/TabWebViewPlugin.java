@@ -14,7 +14,6 @@ import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.webkit.CookieManager;
-import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -31,6 +30,7 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.getcapacitor.BridgeWebChromeClient;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -465,7 +465,9 @@ public class TabWebViewPlugin extends Plugin {
             }
         });
 
-        wv.setWebChromeClient(new WebChromeClient() {
+        // BridgeWebChromeClient aporta onShowFileChooser (inputs type=file/image), permisos
+        // de cámara/micrófono y fullscreen; aquí solo añadimos el progreso para la barra.
+        wv.setWebChromeClient(new BridgeWebChromeClient(getBridge()) {
             @Override
             public void onProgressChanged(WebView view, int newProgress) {
                 emit(view, view.getUrl(), view.getTitle(), newProgress);
