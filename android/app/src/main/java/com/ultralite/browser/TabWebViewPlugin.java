@@ -52,6 +52,7 @@ public class TabWebViewPlugin extends Plugin {
     private String activeTabId = null;
     private ImageButton fab = null;
     private ProgressBar progressBar = null;
+    private BridgeWebChromeClient tabChromeClient = null;
     private ViewGroup root = null;
     private ViewGroup switcherRoot = null;
     private LinearLayout switcherList = null;
@@ -66,6 +67,23 @@ public class TabWebViewPlugin extends Plugin {
     // Los PluginMethod de Capacitor corren en un hilo de trabajo; toda la UI debe ir al main thread.
     private void runOnMain(Runnable r) {
         getActivity().runOnUiThread(r);
+    }
+
+    // El constructor de BridgeWebChromeClient registra ActivityResultLaunchers vía
+    // registerForActivityResult, que lanza IllegalStateException si la Activity ya está
+    // STARTED/RESUMED. Al abrir una página la Activity siempre está RESUMED, así que aquí
+    // se crea UNA única instancia compartida cuando Capacitor carga el plugin dentro de
+    // onCreate (estado CREATED). Es seguro reutilizarla en todas las WebViews porque el
+    // cliente no guarda estado ligado a un WebView concreto.
+    @Override
+    public void load() {
+        super.load();
+        tabChromeClient = new BridgeWebChromeClient(getBridge()) {
+            @Override
+            public void onProgressChanged(WebView view, int newProgress) {
+                emit(view, view.getUrl(), view.getTitle(), newProgress);
+            }
+        };
     }
 
     private int navInset() {
@@ -466,13 +484,11 @@ public class TabWebViewPlugin extends Plugin {
         });
 
         // BridgeWebChromeClient aporta onShowFileChooser (inputs type=file/image), permisos
-        // de cámara/micrófono y fullscreen; aquí solo añadimos el progreso para la barra.
-        wv.setWebChromeClient(new BridgeWebChromeClient(getBridge()) {
-            @Override
-            public void onProgressChanged(WebView view, int newProgress) {
-                emit(view, view.getUrl(), view.getTitle(), newProgress);
-            }
-        });
+        // de cámara/micrófono y fullscreen. La instancia compartida se crea en load()
+        // (durante onCreate); aquí solo se reutiliza y se conserva el progreso de la barra.
+        if (tabChromeClient != null) {
+            wv.setWebChromeClient(tabChromeClient);
+        }
 
         wv.setVisibility(View.GONE);
         root.addView(wv);
