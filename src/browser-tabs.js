@@ -29,7 +29,6 @@ export function subscribeEvents(handler) {
   return () => handles.forEach((h) => h.remove());
 }
 
-export const nativeCreateTab = (id, url) => Tabs && Tabs.createTab({ id, url });
 export const nativeShowTab = (id) => Tabs && Tabs.showTab({ id });
 export const nativeHideTabs = () => Tabs && Tabs.hideTabs();
 export const nativeLoadTab = (id, url) => Tabs && Tabs.loadTab({ id, url });

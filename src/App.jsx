@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, X, Globe, ExternalLink, Search, ArrowRight, Clock, LayoutGrid, GitBranch } from 'lucide-react';
 import { SEARCH_ENGINES } from './constants';
-import { NATIVE, nativeCreateTab, nativeShowTab, nativeHideTabs, nativeCloseTab, nativeShowSwitcher, nativeHideSwitcher, nativeSetFabPosition, subscribeEvents } from './browser-tabs';
+import { NATIVE, nativeLoadTab, nativeShowTab, nativeHideTabs, nativeCloseTab, nativeShowSwitcher, nativeHideSwitcher, nativeSetFabPosition, subscribeEvents } from './browser-tabs';
 import { version as APP_VERSION } from '../package.json';
 import './App.css';
 
@@ -126,6 +126,10 @@ export default function App() {
       ...prev,
       { id: 'fav-' + Date.now(), title: t, url: u, icon: t.charAt(0).toUpperCase() },
     ]);
+  };
+
+  const removeFavorite = (id) => {
+    setFavorites((prev) => prev.filter((f) => f.id !== id));
   };
 
   // Long-press para arrastrar el FAB de React (solo web/dev)
@@ -258,7 +262,7 @@ export default function App() {
     }
 
     if (NATIVE) {
-      nativeCreateTab(activeTabId, targetUrl);
+      nativeLoadTab(activeTabId, targetUrl);
       updateTab(activeTabId, {
         url: targetUrl,
         title: cleanDomain(targetUrl),
@@ -448,6 +452,7 @@ export default function App() {
               favorites={favorites}
               navigateTo={navigateTo}
               onAddFavorite={addFavorite}
+              onRemoveFavorite={removeFavorite}
               onClearHistory={clearHistory}
             />
           )}
@@ -506,7 +511,7 @@ export default function App() {
 /* ============================================================
    MINI HOME (nueva pestaña: búsqueda + historial)
    ============================================================ */
-function MiniHome({ history, favorites, navigateTo, onAddFavorite, onClearHistory }) {
+function MiniHome({ history, favorites, navigateTo, onAddFavorite, onRemoveFavorite, onClearHistory }) {
   const [query, setQuery] = useState('');
   const [confirmingClear, setConfirmingClear] = useState(false);
 
@@ -536,7 +541,7 @@ function MiniHome({ history, favorites, navigateTo, onAddFavorite, onClearHistor
         </button>
       </form>
 
-      <FavoritesSection favorites={favorites} onNavigate={navigateTo} onAdd={onAddFavorite} />
+      <FavoritesSection favorites={favorites} onNavigate={navigateTo} onAdd={onAddFavorite} onRemove={onRemoveFavorite} />
 
       {history.length > 0 && (
         <section className="home-section">
@@ -612,7 +617,7 @@ function MiniHome({ history, favorites, navigateTo, onAddFavorite, onClearHistor
   );
 }
 
-function FavoritesSection({ favorites, onNavigate, onAdd }) {
+function FavoritesSection({ favorites, onNavigate, onAdd, onRemove }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
@@ -630,18 +635,31 @@ function FavoritesSection({ favorites, onNavigate, onAdd }) {
       <h2>Favoritos</h2>
       <div className="fav-grid">
         {favorites.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            className="fav-item"
-            onClick={() => onNavigate(f.url)}
-            title={f.url}
-          >
-            <span className="fav-avatar" aria-hidden="true">
-              {f.icon || '★'}
-            </span>
-            <span className="fav-label">{f.title}</span>
-          </button>
+          <div className="fav-tile" key={f.id}>
+            <button
+              type="button"
+              className="fav-item"
+              onClick={() => onNavigate(f.url)}
+              title={f.url}
+            >
+              <span className="fav-avatar" aria-hidden="true">
+                {f.icon || '★'}
+              </span>
+              <span className="fav-label">{f.title}</span>
+            </button>
+            <button
+              type="button"
+              className="fav-remove"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove(f.id);
+              }}
+              aria-label={`Eliminar ${f.title}`}
+              title="Eliminar favorito"
+            >
+              <X size={12} />
+            </button>
+          </div>
         ))}
         <button
           type="button"
