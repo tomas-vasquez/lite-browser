@@ -1,27 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, X, Globe, ExternalLink, Search, ArrowRight, Clock, LayoutGrid, GitBranch } from 'lucide-react';
+import { Plus, X, Globe, ExternalLink, Search, LayoutGrid } from 'lucide-react';
 import { SEARCH_ENGINES } from './constants';
 import { NATIVE, nativeLoadTab, nativeShowTab, nativeHideTabs, nativeCloseTab, nativeShowSwitcher, nativeHideSwitcher, nativeSetFabPosition, subscribeEvents } from './browser-tabs';
-import { version as APP_VERSION } from '../package.json';
 import './App.css';
 
 // Helper: extraer dominio legible
 const cleanDomain = (url) => (url || '').replace(/^https?:\/\//, '');
 const isNewTab = (url) => url === 'ultralite://newtab';
+// Página de inicio: HTML estático servido como cualquier otra página
+const HOME_URL = NATIVE ? 'https://localhost/home.html' : '/home.html';
 const FAB_SIZE = 44;
-
-const loadFavorites = () => {
-  try {
-    const raw = localStorage.getItem('ultralite.favorites');
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return arr;
-    }
-  } catch {
-    /* noop */
-  }
-  return [];
-};
 
 const loadHistory = () => {
   try {
@@ -57,7 +45,6 @@ export default function App() {
   const [activeTabId, setActiveTabId] = useState('tab-1');
   const [tabSwitcherOpen, setTabSwitcherOpen] = useState(false);
   const [history, setHistory] = useState(loadHistory);
-  const [favorites, setFavorites] = useState(loadFavorites);
   const [fabPos, setFabPos] = useState(null);
   const [settings] = useState({
     searchEngine: 'google',
@@ -98,15 +85,6 @@ export default function App() {
     if (NATIVE) nativeSetFabPosition(fabPos.x, fabPos.y);
   }, [fabPos]);
 
-  // Persistir favoritos
-  useEffect(() => {
-    try {
-      localStorage.setItem('ultralite.favorites', JSON.stringify(favorites));
-    } catch {
-      /* noop */
-    }
-  }, [favorites]);
-
   // Persistir historial
   useEffect(() => {
     try {
@@ -115,22 +93,6 @@ export default function App() {
       /* noop */
     }
   }, [history]);
-
-  const clearHistory = () => setHistory([]);
-
-  const addFavorite = (title, url) => {
-    const u = (url || '').trim();
-    if (!u) return;
-    const t = (title || '').trim() || cleanDomain(u);
-    setFavorites((prev) => [
-      ...prev,
-      { id: 'fav-' + Date.now(), title: t, url: u, icon: t.charAt(0).toUpperCase() },
-    ]);
-  };
-
-  const removeFavorite = (id) => {
-    setFavorites((prev) => prev.filter((f) => f.id !== id));
-  };
 
   // Long-press para arrastrar el FAB de React (solo web/dev)
   const fabDragRef = useRef({ timer: null, dragging: false, startX: 0, startY: 0 });
@@ -341,6 +303,18 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // La página de inicio (home.html) pide navegación vía postMessage cuando está en un iframe
+  useEffect(() => {
+    const onMessage = (e) => {
+      if (e?.data?.type === 'ultralite:navigate' && typeof e.data.url === 'string') {
+        navigateTo(e.data.url);
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Eventos del plugin nativo (páginas nativas por pestaña)
   useEffect(() => {
     return subscribeEvents((ev, data) => {
@@ -446,14 +420,12 @@ export default function App() {
           )}
 
           {isNewTab(activeTab?.url) && (
-            <MiniHome
+            <iframe
               key={activeTab.id}
-              history={history}
-              favorites={favorites}
-              navigateTo={navigateTo}
-              onAddFavorite={addFavorite}
-              onRemoveFavorite={removeFavorite}
-              onClearHistory={clearHistory}
+              src={HOME_URL}
+              title="Inicio"
+              className="web-iframe"
+              sandbox="allow-scripts allow-same-origin allow-forms"
             />
           )}
 
@@ -505,204 +477,6 @@ export default function App() {
         )}
       </div>
     </div>
-  );
-}
-
-/* ============================================================
-   MINI HOME (nueva pestaña: búsqueda + historial)
-   ============================================================ */
-function MiniHome({ history, favorites, navigateTo, onAddFavorite, onRemoveFavorite, onClearHistory }) {
-  const [query, setQuery] = useState('');
-  const [confirmingClear, setConfirmingClear] = useState(false);
-
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (query.trim()) navigateTo(query);
-  };
-
-  return (
-    <div className="minihome">
-      <form className="home-search" onSubmit={handleSearch}>
-        <span className="home-search-icon">
-          <Search size={18} className="c-text-slate" />
-        </span>
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar o escribir una URL"
-          enterKeyHint="go"
-          autoCapitalize="off"
-          autoCorrect="off"
-          autoFocus
-        />
-        <button type="submit" className="home-search-btn" aria-label="Ir">
-          <ArrowRight size={18} />
-        </button>
-      </form>
-
-      <FavoritesSection favorites={favorites} onNavigate={navigateTo} onAdd={onAddFavorite} onRemove={onRemoveFavorite} />
-
-      {history.length > 0 && (
-        <section className="home-section">
-          <div className="section-title-row">
-            <h2>Recientes</h2>
-            <button
-              type="button"
-              className={`section-action ${confirmingClear ? 'danger' : ''}`}
-              onClick={() => {
-                if (confirmingClear) {
-                  onClearHistory();
-                  setConfirmingClear(false);
-                } else {
-                  setConfirmingClear(true);
-                }
-              }}
-            >
-              {confirmingClear ? 'Sí, borrar todo' : 'Borrar'}
-            </button>
-          </div>
-          {confirmingClear && (
-            <div className="clear-confirm">
-              <span>¿Borrar todo el historial?</span>
-              <button
-                type="button"
-                className="clear-confirm-cancel"
-                onClick={() => setConfirmingClear(false)}
-              >
-                Cancelar
-              </button>
-            </div>
-          )}
-          <div className="recent-list">
-            {history.slice(0, 8).map((h, i) => (
-              <button key={i} type="button" className="recent-item" onClick={() => navigateTo(h.url)}>
-                <span className="recent-icon">
-                  <Clock size={15} className="c-text-slate" />
-                </span>
-                <span className="recent-info">
-                  <span className="recent-title">{cleanDomain(h.title)}</span>
-                  <span className="recent-url">{cleanDomain(h.url)}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <footer className="home-footer">
-        <span className="home-footer-brand">
-          <GitBranch size={14} /> Ultralite Browser · v{APP_VERSION}
-        </span>
-        <a
-          href="https://github.com/tomas-vasquez"
-          onClick={(e) => {
-            e.preventDefault();
-            navigateTo('https://github.com/tomas-vasquez');
-          }}
-        >
-          github.com/tomas-vasquez
-        </a>
-        <a
-          href="https://github.com/tomas-vasquez/lite-browser"
-          onClick={(e) => {
-            e.preventDefault();
-            navigateTo('https://github.com/tomas-vasquez/lite-browser');
-          }}
-        >
-          github.com/tomas-vasquez/lite-browser
-        </a>
-      </footer>
-    </div>
-  );
-}
-
-function FavoritesSection({ favorites, onNavigate, onAdd, onRemove }) {
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState('');
-  const [url, setUrl] = useState('');
-
-  const submit = (e) => {
-    e.preventDefault();
-    onAdd(title, url);
-    setTitle('');
-    setUrl('');
-    setOpen(false);
-  };
-
-  return (
-    <section className="home-section">
-      <h2>Favoritos</h2>
-      <div className="fav-grid">
-        {favorites.map((f) => (
-          <div className="fav-tile" key={f.id}>
-            <button
-              type="button"
-              className="fav-item"
-              onClick={() => onNavigate(f.url)}
-              title={f.url}
-            >
-              <span className="fav-avatar" aria-hidden="true">
-                {f.icon || '★'}
-              </span>
-              <span className="fav-label">{f.title}</span>
-            </button>
-            <button
-              type="button"
-              className="fav-remove"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove(f.id);
-              }}
-              aria-label={`Eliminar ${f.title}`}
-              title="Eliminar favorito"
-            >
-              <X size={12} />
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          className="fav-item fav-add"
-          onClick={() => setOpen((o) => !o)}
-          aria-label="Añadir nuevo favorito"
-        >
-          <span className="fav-avatar" aria-hidden="true">
-            {open ? <X size={18} /> : <Plus size={18} />}
-          </span>
-          <span className="fav-label">{open ? 'Cancelar' : 'Añadir nuevo'}</span>
-        </button>
-      </div>
-      {open && (
-        <form className="fav-form" onSubmit={submit}>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Nombre"
-            autoCapitalize="words"
-          />
-          <input
-            type="text"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://…"
-            enterKeyHint="done"
-            autoCapitalize="off"
-            autoCorrect="off"
-            autoFocus
-          />
-          <div className="fav-form-actions">
-            <button type="button" className="btn-secondary" onClick={() => setOpen(false)}>
-              Cancelar
-            </button>
-            <button type="submit" className="fav-form-ok">
-              Añadir
-            </button>
-          </div>
-        </form>
-      )}
-    </section>
   );
 }
 
